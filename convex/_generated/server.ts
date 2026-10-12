@@ -1,0 +1,32 @@
+/* Bootstrap definitions; refreshed by `npx convex codegen`. */
+import {
+  queryGeneric,
+  mutationGeneric,
+  internalQueryGeneric,
+  internalMutationGeneric,
+  actionGeneric,
+  internalActionGeneric,
+  httpActionGeneric,
+} from "convex/server"
+import type {
+  QueryBuilder,
+  MutationBuilder,
+  ActionBuilder,
+  GenericQueryCtx,
+  GenericMutationCtx,
+  GenericActionCtx,
+} from "convex/server"
+import type { DataModel } from "./dataModel"
+export const query: QueryBuilder<DataModel, "public"> = queryGeneric
+export const mutation: MutationBuilder<DataModel, "public"> = mutationGeneric
+export const internalQuery: QueryBuilder<DataModel, "internal"> =
+  internalQueryGeneric
+export const internalMutation: MutationBuilder<DataModel, "internal"> =
+  internalMutationGeneric
+export const action: ActionBuilder<DataModel, "public"> = actionGeneric
+export const internalAction: ActionBuilder<DataModel, "internal"> =
+  internalActionGeneric
+export const httpAction = httpActionGeneric
+export type QueryCtx = GenericQueryCtx<DataModel>
+export type MutationCtx = GenericMutationCtx<DataModel>
+export type ActionCtx = GenericActionCtx<DataModel>
