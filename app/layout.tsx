@@ -1,36 +1,33 @@
-import { Geist, Geist_Mono, Roboto_Slab, Oxanium } from "next/font/google"
-
+import type { Metadata } from "next"
+import "@fontsource-variable/roboto-slab"
+import "@fontsource-variable/oxanium"
 import "./globals.css"
-import { ThemeProvider } from "@/components/theme-provider"
-import { cn } from "@/lib/utils";
-
-const oxaniumHeading = Oxanium({subsets:['latin'],variable:'--font-heading'});
-
-const robotoSlab = Roboto_Slab({subsets:['latin'],variable:'--font-serif'});
-
-const fontSans = Geist({
-  subsets: ["latin"],
-  variable: "--font-sans",
-})
-
-const fontMono = Geist_Mono({
-  subsets: ["latin"],
-  variable: "--font-mono",
-})
-
+import { Providers } from "@/components/providers"
+import { Shell } from "@/components/shell"
+import { configured, siteUrl } from "@/lib/config"
+export const metadata: Metadata = {
+  metadataBase: new URL(siteUrl),
+  title: {
+    default: "Gibberish — a little corner of the internet",
+    template: "%s · Gibberish",
+  },
+  description:
+    "Big feelings. Small observations. Questionable punctuation. A home for your perfectly unnecessary words.",
+  robots: configured
+    ? { index: true, follow: true }
+    : { index: false, follow: false },
+}
 export default function RootLayout({
   children,
-}: Readonly<{
+}: {
   children: React.ReactNode
-}>) {
+}) {
   return (
-    <html
-      lang="en"
-      suppressHydrationWarning
-      className={cn("antialiased", fontSans.variable, fontMono.variable, "font-serif", robotoSlab.variable, oxaniumHeading.variable)}
-    >
+    <html lang="en" suppressHydrationWarning>
       <body>
-        <ThemeProvider>{children}</ThemeProvider>
+        <Providers>
+          <Shell>{children}</Shell>
+        </Providers>
       </body>
     </html>
   )
