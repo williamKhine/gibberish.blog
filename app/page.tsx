@@ -23,6 +23,14 @@ export default async function Home() {
             <br className="desktop-break" /> and stories that don’t need a
             point.
           </p>
+          <div className="hero-actions">
+            <Link href="/dashboard" className="button primary">
+              Make yourself at home <span>↗</span>
+            </Link>
+            <span className="handwritten">
+              no niche required. <span>⤴</span>
+            </span>
+          </div>
         </div>
         <div className="hero-collage" aria-hidden="true">
           <div className="collage-paper">
@@ -92,6 +100,16 @@ export default async function Home() {
         </div>
         <Feed initial={initial} />
       </section>
+      <aside className="join-strip">
+        <span className="join-star">✷</span>
+        <div>
+          <h2>Your half-baked thought belongs here.</h2>
+          <p>Bring your curiosity. Leave your personal brand at the door.</p>
+        </div>
+        <Link href="/dashboard" className="button dark-button">
+          Find your little corner ↗
+        </Link>
+      </aside>
     </div>
   )
 }

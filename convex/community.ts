@@ -2,13 +2,18 @@ import { ConvexError } from "convex/values"
 import { v } from "convex/values"
 import { paginationOptsValidator } from "convex/server"
 import { mutation, query } from "./_generated/server"
+import { content } from "./schema"
 import {
+  contentMedia,
+  limit,
   member,
   optionalMember,
+  ownsMedia,
   profile,
   publicMember,
   visiblePost,
 } from "./access"
+import { EMPTY_BODY, parseBody, plainText, slugify } from "../lib/content"
 import type { Doc } from "./_generated/dataModel"
 import type { QueryCtx } from "./_generated/server"
 
@@ -62,6 +67,78 @@ export const me = query({
           .map((s) => s.trim())
           .includes(user.subject),
     }
+  },
+})
+export const apply = mutation({
+  args: { introduction: v.string(), sample: v.string(), accepted: v.boolean() },
+  handler: async (ctx, args) => {
+    const user = await member(ctx)
+    if (user.approved) throw new ConvexError("You are already approved.")
+    if (
+      !args.accepted ||
+      args.introduction.trim().length < 20 ||
+      args.introduction.length > 2000 ||
+      args.sample.trim().length < 50 ||
+      args.sample.length > 10000
+    )
+      throw new ConvexError(
+        "Accept the rules and include an introduction (20–2,000 characters) and sample (50–10,000 characters)."
+      )
+    await limit(ctx, user._id, "apply", 3, 86400000)
+    const existing = await ctx.db
+      .query("applications")
+      .withIndex("member", (q) => q.eq("member", user._id))
+      .unique()
+    if (existing?.status === "pending")
+      throw new ConvexError("Your application is already in the queue.")
+    const value = {
+      member: user._id,
+      introduction: args.introduction.trim(),
+      sample: args.sample.trim(),
+      status: "pending" as const,
+      reason: "",
+    }
+    return existing
+      ? ctx.db.replace(existing._id, value)
+      : ctx.db.insert("applications", value)
+  },
+})
+export const saveProfile = mutation({
+  args: {
+    handle: v.string(),
+    name: v.string(),
+    bio: v.string(),
+    accent: v.string(),
+    sticker: v.string(),
+    avatar: v.optional(v.id("media")),
+    cover: v.optional(v.id("media")),
+  },
+  handler: async (ctx, args) => {
+    const user = await member(ctx, true)
+    if (
+      !/^[a-z0-9][a-z0-9-]{2,29}$/.test(args.handle) ||
+      !args.name.trim() ||
+      args.name.length > 60 ||
+      args.bio.length > 400 ||
+      !["yellow", "pink", "blue", "green"].includes(args.accent) ||
+      !["✳", "✿", "★", "☻", "↗"].includes(args.sticker)
+    )
+      throw new ConvexError("Check your profile fields.")
+    const existing = await ctx.db
+      .query("members")
+      .withIndex("handle", (q) => q.eq("handle", args.handle))
+      .unique()
+    if (existing && existing._id !== user._id)
+      throw new ConvexError("That handle is taken.")
+    await ownsMedia(
+      ctx,
+      user._id,
+      [args.avatar, args.cover].filter(
+        (id): id is NonNullable<typeof id> => !!id
+      )
+    )
+    await limit(ctx, user._id, "profile", 10)
+    await ctx.db.patch(user._id, args)
   },
 })
 export const getProfile = query({
@@ -157,5 +234,125 @@ export const getPost = query({
     const id = ctx.db.normalizeId("posts", args.id)
     const post = id ? await visiblePost(ctx, id) : null
     return post ? card(ctx, post) : null
+  },
+})
+export const drafts = query({
+  args: {},
+  handler: async (ctx) => {
+    const user = await member(ctx)
+    return ctx.db
+      .query("posts")
+      .withIndex("author", (q) => q.eq("author", user._id))
+      .order("desc")
+      .collect()
+  },
+})
+export const draft = query({
+  args: { id: v.id("posts") },
+  handler: async (ctx, args) => {
+    const user = await member(ctx),
+      post = await ctx.db.get(args.id)
+    if (!post || post.author !== user._id)
+      throw new ConvexError("Draft unavailable.")
+    return post
+  },
+})
+export const createDraft = mutation({
+  args: {},
+  handler: async (ctx) => {
+    const user = await member(ctx)
+    await limit(ctx, user._id, "draft", 10)
+    return ctx.db.insert("posts", {
+      author: user._id,
+      working: { title: "", body: EMPTY_BODY, excerpt: "", tags: [] },
+      revision: 0,
+      updatedAt: Date.now(),
+      slug: "untitled",
+      removed: false,
+      commentsClosed: false,
+      searchText: "",
+    })
+  },
+})
+export const saveDraft = mutation({
+  args: { id: v.id("posts"), revision: v.number(), content },
+  handler: async (ctx, args) => {
+    const user = await member(ctx),
+      post = await ctx.db.get(args.id)
+    if (!post || post.author !== user._id)
+      throw new ConvexError("Draft unavailable.")
+    if (post.revision !== args.revision)
+      throw new ConvexError(
+        "This draft changed in another tab. Copy your text before reloading."
+      )
+    const c = args.content
+    if (
+      c.title.length > 180 ||
+      c.excerpt.length > 300 ||
+      c.tags.length > 5 ||
+      c.tags.some((t) => !/^[a-z0-9-]{1,30}$/.test(t))
+    )
+      throw new ConvexError(
+        "Use a title under 180 characters, a short excerpt, and up to five simple tags."
+      )
+    parseBody(c.body)
+    await ownsMedia(ctx, user._id, contentMedia(c))
+    await ctx.db.patch(post._id, {
+      working: c,
+      updatedAt: Date.now(),
+      revision: post.revision + 1,
+    })
+    return post.revision + 1
+  },
+})
+export const postAction = mutation({
+  args: {
+    id: v.id("posts"),
+    action: v.union(
+      v.literal("publish"),
+      v.literal("unpublish"),
+      v.literal("delete"),
+      v.literal("comments")
+    ),
+  },
+  handler: async (ctx, args) => {
+    const user = await member(ctx, args.action === "publish"),
+      post = await ctx.db.get(args.id)
+    if (!post || post.author !== user._id)
+      throw new ConvexError("Post unavailable.")
+    if (args.action === "publish") {
+      if (post.removed || user.hidden)
+        throw new ConvexError("Moderated content cannot be republished.")
+      if (
+        !post.working.title.trim() ||
+        !plainText(parseBody(post.working.body)).trim()
+      )
+        throw new ConvexError("Add a title and some words first.")
+      await limit(ctx, user._id, "publish", 10)
+      await ownsMedia(ctx, user._id, contentMedia(post.working))
+      await ctx.db.patch(post._id, {
+        published: post.working,
+        publishedAt: post.publishedAt ?? Date.now(),
+        slug: slugify(post.working.title),
+        searchText: `${post.working.title} ${plainText(parseBody(post.working.body))}`,
+      })
+    } else if (args.action === "unpublish")
+      await ctx.db.patch(post._id, {
+        published: undefined,
+        publishedAt: undefined,
+        searchText: "",
+      })
+    else if (args.action === "comments")
+      await ctx.db.patch(post._id, { commentsClosed: !post.commentsClosed })
+    else {
+      for (const table of ["comments", "bookmarks", "reactions"] as const) {
+        const rows = await ctx.db
+          .query(table)
+          .filter((q) => q.eq(q.field("post"), post._id))
+          .collect()
+        for (const row of rows) await ctx.db.delete(row._id)
+      }
+      await ctx.db.delete(post._id)
+    }
   },
 })

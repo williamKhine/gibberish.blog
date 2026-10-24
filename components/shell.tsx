@@ -6,8 +6,10 @@ import { SignInButton, UserButton, useUser } from "@clerk/nextjs"
 import { HugeiconsIcon } from "@hugeicons/react"
 import {
   Search01Icon,
+  PencilEdit01Icon,
   Sun03Icon,
   Moon02Icon,
+  ArrowUpRight01Icon,
 } from "@hugeicons/core-free-icons"
 import { configured } from "@/lib/config"
 import { Button } from "./ui/button"
@@ -69,10 +71,14 @@ export function Shell({ children }: { children: React.ReactNode }) {
                 Log in
               </Link>
             )}
+            <Link href="/dashboard" className="button primary">
+              <HugeiconsIcon icon={PencilEdit01Icon} size={17} /> Write a little
+            </Link>
           </div>
         </div>
         <nav className="mobile-nav" aria-label="Mobile navigation">
           <Link href="/">The good stuff</Link>
+          <Link href="/dashboard">Your corner</Link>
         </nav>
       </header>
       <main id="main">{children}</main>
@@ -83,6 +89,9 @@ export function Shell({ children }: { children: React.ReactNode }) {
         <span>A little less polished. A little more you.</span>
         <div>
           <Link href="/rules">House rules</Link>
+          <Link href="/dashboard">
+            Your corner <HugeiconsIcon icon={ArrowUpRight01Icon} size={14} />
+          </Link>
         </div>
       </footer>
       {!configured && (
