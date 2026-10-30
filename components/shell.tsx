@@ -41,6 +41,13 @@ export function Shell({ children }: { children: React.ReactNode }) {
             <Link className={path === "/" ? "active" : ""} href="/">
               The good stuff
             </Link>
+            <Link
+              className={path === "/following" ? "active" : ""}
+              href="/following"
+            >
+              Following
+            </Link>
+            <Link href="/bookmarks">Bookmarks</Link>
           </nav>
           <div className="header-actions">
             <Link href="/search" aria-label="Search" className="icon-button">
@@ -78,6 +85,8 @@ export function Shell({ children }: { children: React.ReactNode }) {
         </div>
         <nav className="mobile-nav" aria-label="Mobile navigation">
           <Link href="/">The good stuff</Link>
+          <Link href="/following">Following</Link>
+          <Link href="/bookmarks">Bookmarks</Link>
           <Link href="/dashboard">Your corner</Link>
         </nav>
       </header>

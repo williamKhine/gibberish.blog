@@ -356,3 +356,212 @@ export const postAction = mutation({
     }
   },
 })
+export const social = query({
+  args: { post: v.id("posts") },
+  handler: async (ctx, args) => {
+    const post = await visiblePost(ctx, args.post)
+    if (!post) return null
+    const user = await optionalMember(ctx)
+    const reactions = await ctx.db
+      .query("reactions")
+      .withIndex("post", (q) => q.eq("post", args.post))
+      .collect()
+    const counts: Record<string, number> = {}
+    for (const reaction of reactions) {
+      const by = await ctx.db.get(reaction.member)
+      if (by && !by.suspended)
+        counts[reaction.emoji] = (counts[reaction.emoji] ?? 0) + 1
+    }
+    return {
+      counts: Object.entries(counts).map(([emoji, count]) => ({
+        emoji,
+        count,
+      })),
+      mine: reactions.find((r) => r.member === user?._id)?.emoji,
+      bookmarked:
+        !!user &&
+        !!(await ctx.db
+          .query("bookmarks")
+          .withIndex("pair", (q) =>
+            q.eq("member", user._id).eq("post", args.post)
+          )
+          .unique()),
+      following:
+        !!user &&
+        !!(await ctx.db
+          .query("follows")
+          .withIndex("pair", (q) =>
+            q.eq("member", user._id).eq("target", post.author)
+          )
+          .unique()),
+    }
+  },
+})
+export const interact = mutation({
+  args: {
+    post: v.id("posts"),
+    action: v.union(
+      v.literal("bookmark"),
+      v.literal("follow"),
+      v.literal("reaction")
+    ),
+    emoji: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const user = await member(ctx),
+      post = await visiblePost(ctx, args.post)
+    if (!post) throw new ConvexError("Post unavailable.")
+    await limit(ctx, user._id, "interact", 60)
+    if (args.action === "follow") {
+      if (user._id === post.author)
+        throw new ConvexError("You cannot follow yourself.")
+      const row = await ctx.db
+        .query("follows")
+        .withIndex("pair", (q) =>
+          q.eq("member", user._id).eq("target", post.author)
+        )
+        .unique()
+      if (row) await ctx.db.delete(row._id)
+      else
+        await ctx.db.insert("follows", {
+          member: user._id,
+          target: post.author,
+        })
+    } else if (args.action === "bookmark") {
+      const row = await ctx.db
+        .query("bookmarks")
+        .withIndex("pair", (q) => q.eq("member", user._id).eq("post", post._id))
+        .unique()
+      if (row) await ctx.db.delete(row._id)
+      else
+        await ctx.db.insert("bookmarks", { member: user._id, post: post._id })
+    } else {
+      if (!["💛", "😂", "🤯", "✨"].includes(args.emoji ?? ""))
+        throw new ConvexError("Choose a supported reaction.")
+      const row = await ctx.db
+        .query("reactions")
+        .withIndex("pair", (q) => q.eq("member", user._id).eq("post", post._id))
+        .unique()
+      if (row) {
+        if (row.emoji === args.emoji) await ctx.db.delete(row._id)
+        else await ctx.db.patch(row._id, { emoji: args.emoji! })
+      } else
+        await ctx.db.insert("reactions", {
+          member: user._id,
+          post: post._id,
+          emoji: args.emoji!,
+        })
+    }
+  },
+})
+export const comments = query({
+  args: { post: v.id("posts"), paginationOpts: paginationOptsValidator },
+  handler: async (ctx, args) => {
+    if (!(await visiblePost(ctx, args.post)))
+      return { page: [], isDone: true, continueCursor: "" }
+    const result = await ctx.db
+      .query("comments")
+      .withIndex("post", (q) => q.eq("post", args.post))
+      .order("asc")
+      .paginate(args.paginationOpts)
+    const page = []
+    for (const c of result.page) {
+      const author = await ctx.db.get(c.author)
+      if (c.removed || !author || !publicMember(author)) continue
+      page.push({ ...c, author: profile(author) })
+    }
+    return { ...result, page }
+  },
+})
+export const comment = mutation({
+  args: {
+    post: v.id("posts"),
+    text: v.string(),
+    parent: v.optional(v.id("comments")),
+    id: v.optional(v.id("comments")),
+    remove: v.optional(v.boolean()),
+  },
+  handler: async (ctx, args) => {
+    const user = await member(ctx, true),
+      post = await visiblePost(ctx, args.post)
+    if (!post) throw new ConvexError("Post unavailable.")
+    if (args.id) {
+      const row = await ctx.db.get(args.id)
+      if (
+        !row ||
+        row.author !== user._id ||
+        row.post !== args.post ||
+        row.removed
+      )
+        throw new ConvexError("Comment unavailable.")
+      if (args.remove) {
+        await ctx.db.patch(row._id, { removed: true, text: "" })
+        return
+      }
+    }
+    if (post.commentsClosed) throw new ConvexError("Comments are closed.")
+    if (!args.text.trim() || args.text.length > 2000)
+      throw new ConvexError("Comments must be 1–2,000 characters.")
+    if (args.parent) {
+      const parent = await ctx.db.get(args.parent)
+      if (
+        !parent ||
+        parent.post !== post._id ||
+        parent.parent ||
+        parent.removed ||
+        !publicMember(await ctx.db.get(parent.author))
+      )
+        throw new ConvexError("Reply unavailable.")
+    }
+    await limit(ctx, user._id, "comment", 10)
+    if (args.id)
+      await ctx.db.patch(args.id, {
+        text: args.text.trim(),
+        updatedAt: Date.now(),
+      })
+    else
+      return await ctx.db.insert("comments", {
+        post: args.post,
+        author: user._id,
+        parent: args.parent,
+        text: args.text.trim(),
+        removed: false,
+        updatedAt: Date.now(),
+      })
+  },
+})
+export const following = query({
+  args: { target: v.id("members") },
+  handler: async (ctx, args) => {
+    const user = await optionalMember(ctx)
+    return (
+      !!user &&
+      !user.suspended &&
+      !!(await ctx.db
+        .query("follows")
+        .withIndex("pair", (q) =>
+          q.eq("member", user._id).eq("target", args.target)
+        )
+        .unique())
+    )
+  },
+})
+export const toggleFollow = mutation({
+  args: { target: v.id("members") },
+  handler: async (ctx, args) => {
+    const user = await member(ctx)
+    const target = await ctx.db.get(args.target)
+    if (!publicMember(target) || user._id === args.target)
+      throw new ConvexError("Cannot follow this member.")
+    await limit(ctx, user._id, "interact", 60)
+    const row = await ctx.db
+      .query("follows")
+      .withIndex("pair", (q) =>
+        q.eq("member", user._id).eq("target", args.target)
+      )
+      .unique()
+    if (row) await ctx.db.delete(row._id)
+    else
+      await ctx.db.insert("follows", { member: user._id, target: args.target })
+  },
+})

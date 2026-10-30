@@ -4,6 +4,7 @@ import { notFound, redirect } from "next/navigation"
 import { publicPost } from "@/lib/server"
 import { AuthorLine, MediaImage } from "@/components/post-card"
 import { RichBody } from "@/components/rich-body"
+import { Social } from "@/components/social"
 export const dynamic = "force-dynamic"
 export async function generateMetadata({
   params,
@@ -59,6 +60,7 @@ export default async function Page({
         />
       )}
       <RichBody body={p.body} post={p._id} />
+      <Social post={p._id} closed={p.commentsClosed} />
     </article>
   )
 }

@@ -5,6 +5,7 @@ import { configured } from "@/lib/config"
 import { demoPosts } from "@/lib/demo"
 import { Feed } from "@/components/feed"
 import { MediaImage } from "@/components/post-card"
+import { FollowButton } from "@/components/social"
 export const dynamic = "force-dynamic"
 async function get(handle: string) {
   return configured
@@ -56,6 +57,9 @@ export default async function Page({
         <h1>{p.name}</h1>
         <span className="muted">@{p.handle}</span>
         <p>{p.bio}</p>
+        <div className="row">
+          <FollowButton target={p._id} />
+        </div>
       </section>
       <h2 className="mb-6 text-2xl">Things left in this corner</h2>
       <Feed handle={handle} initial={initial} />
