@@ -4,6 +4,7 @@ import { paginationOptsValidator } from "convex/server"
 import { mutation, query } from "./_generated/server"
 import { content } from "./schema"
 import {
+  admin,
   contentMedia,
   limit,
   member,
@@ -528,6 +529,167 @@ export const comment = mutation({
         removed: false,
         updatedAt: Date.now(),
       })
+  },
+})
+export const report = mutation({
+  args: {
+    kind: v.union(
+      v.literal("post"),
+      v.literal("comment"),
+      v.literal("profile")
+    ),
+    target: v.string(),
+    reason: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const user = await member(ctx)
+    if (args.reason.trim().length < 10 || args.reason.length > 2000)
+      throw new ConvexError("Please describe the issue in 10–2,000 characters.")
+    let available = false
+    if (args.kind === "post") {
+      const id = ctx.db.normalizeId("posts", args.target)
+      available = !!id && !!(await visiblePost(ctx, id))
+    } else if (args.kind === "profile") {
+      const id = ctx.db.normalizeId("members", args.target)
+      available = !!id && publicMember(await ctx.db.get(id))
+    } else {
+      const id = ctx.db.normalizeId("comments", args.target)
+      const row = id ? await ctx.db.get(id) : null
+      available =
+        !!row &&
+        !row.removed &&
+        publicMember(await ctx.db.get(row.author)) &&
+        !!(await visiblePost(ctx, row.post))
+    }
+    if (!available) throw new ConvexError("Content unavailable.")
+    await limit(ctx, user._id, "report", 5, 3600000)
+    await ctx.db.insert("reports", {
+      ...args,
+      reporter: user._id,
+      resolved: false,
+    })
+  },
+})
+export const adminQueue = query({
+  args: {},
+  handler: async (ctx) => {
+    await admin(ctx)
+    const reports = await ctx.db
+      .query("reports")
+      .withIndex("resolved", (q) => q.eq("resolved", false))
+      .collect()
+    const enriched = await Promise.all(
+      reports.map(async (report) => {
+        let text = "Content has been deleted.",
+          author: string | undefined,
+          href: string | undefined
+        if (report.kind === "post") {
+          const id = ctx.db.normalizeId("posts", report.target)
+          const post = id ? await ctx.db.get(id) : null
+          if (post) {
+            author = post.author
+            text = post.published
+              ? `${post.published.title}\n\n${plainText(parseBody(post.published.body))}`
+              : "Post is no longer published."
+            href = `/p/${post._id}/${post.slug}`
+          }
+        } else if (report.kind === "comment") {
+          const id = ctx.db.normalizeId("comments", report.target)
+          const comment = id ? await ctx.db.get(id) : null
+          if (comment) {
+            author = comment.author
+            text = comment.removed ? "Comment has been removed." : comment.text
+            const post = await ctx.db.get(comment.post)
+            if (post)
+              href = `/p/${post._id}/${post.slug}#comment-${comment._id}`
+          }
+        } else {
+          const id = ctx.db.normalizeId("members", report.target)
+          const user = id ? await ctx.db.get(id) : null
+          if (user) {
+            author = user._id
+            text = `${user.name} (@${user.handle})\n${user.bio}`
+            href = `/u/${user.handle}`
+          }
+        }
+        return { ...report, text, author, href }
+      })
+    )
+    return {
+      applications: await ctx.db
+        .query("applications")
+        .withIndex("status", (q) => q.eq("status", "pending"))
+        .collect(),
+      reports: enriched,
+      members: await ctx.db.query("members").order("desc").take(100),
+      audit: await ctx.db.query("moderation").order("desc").take(50),
+    }
+  },
+})
+export const moderate = mutation({
+  args: {
+    action: v.union(
+      v.literal("approve"),
+      v.literal("reject"),
+      v.literal("suspend"),
+      v.literal("reinstate"),
+      v.literal("hide-profile"),
+      v.literal("show-profile"),
+      v.literal("remove-post"),
+      v.literal("remove-comment"),
+      v.literal("resolve")
+    ),
+    target: v.string(),
+    reason: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const actor = await admin(ctx)
+    if (args.reason.trim().length < 3 || args.reason.length > 2000)
+      throw new ConvexError("Include a moderation reason.")
+    if (args.action === "approve" || args.action === "reject") {
+      const id = ctx.db.normalizeId("applications", args.target),
+        application = id ? await ctx.db.get(id) : null
+      if (!application || application.status !== "pending")
+        throw new ConvexError("Application is no longer pending.")
+      await ctx.db.patch(application._id, {
+        status: args.action === "approve" ? "approved" : "rejected",
+        reason: args.reason,
+      })
+      if (args.action === "approve")
+        await ctx.db.patch(application.member, { approved: true })
+    } else if (
+      ["suspend", "reinstate", "hide-profile", "show-profile"].includes(
+        args.action
+      )
+    ) {
+      const id = ctx.db.normalizeId("members", args.target)
+      if (!id || !(await ctx.db.get(id)) || id === actor._id)
+        throw new ConvexError(
+          "Member unavailable or action targets your own account."
+        )
+      await ctx.db.patch(
+        id,
+        args.action.includes("profile")
+          ? { hidden: args.action === "hide-profile" }
+          : { suspended: args.action === "suspend" }
+      )
+    } else if (args.action === "remove-post") {
+      const id = ctx.db.normalizeId("posts", args.target)
+      if (!id || !(await ctx.db.get(id)))
+        throw new ConvexError("Post unavailable.")
+      await ctx.db.patch(id, { removed: true, searchText: "" })
+    } else if (args.action === "remove-comment") {
+      const id = ctx.db.normalizeId("comments", args.target)
+      if (!id || !(await ctx.db.get(id)))
+        throw new ConvexError("Comment unavailable.")
+      await ctx.db.patch(id, { removed: true, text: "" })
+    } else {
+      const id = ctx.db.normalizeId("reports", args.target)
+      if (!id || !(await ctx.db.get(id)))
+        throw new ConvexError("Report unavailable.")
+      await ctx.db.patch(id, { resolved: true })
+    }
+    await ctx.db.insert("moderation", { actor: actor.subject, ...args })
   },
 })
 export const following = query({

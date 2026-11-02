@@ -42,6 +42,11 @@ export function Dashboard() {
             Hello, {user.approved ? user.name : "future scribbler"}.
           </h1>
         </div>
+        {user.isAdmin && (
+          <Link className="button" href="/admin">
+            Community desk ↗
+          </Link>
+        )}
       </div>
       <p className="intro">
         A safe place for your works in progress. Perfectly unfinished is fine.

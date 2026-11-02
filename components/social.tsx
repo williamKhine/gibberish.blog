@@ -11,6 +11,82 @@ import { api } from "@/convex/_generated/api"
 import type { Id } from "@/convex/_generated/dataModel"
 import { configured } from "@/lib/config"
 import { Button } from "./ui/button"
+export function ReportButton({
+  kind,
+  target,
+}: {
+  kind: "post" | "comment" | "profile"
+  target: string
+}) {
+  return configured ? <ConnectedReport kind={kind} target={target} /> : null
+}
+function ConnectedReport({
+  kind,
+  target,
+}: {
+  kind: "post" | "comment" | "profile"
+  target: string
+}) {
+  const { isAuthenticated } = useConvexAuth()
+  const report = useMutation(api.community.report)
+  const [open, setOpen] = useState(false)
+  const [reason, setReason] = useState("")
+  const [error, setError] = useState("")
+  const [sent, setSent] = useState(false)
+  const [busy, setBusy] = useState(false)
+  return (
+    <>
+      <Button variant="ghost" onClick={() => setOpen(!open)}>
+        Report
+      </Button>
+      {open && (
+        <form
+          className="panel"
+          onSubmit={async (e) => {
+            e.preventDefault()
+            setBusy(true)
+            try {
+              await report({ kind, target, reason })
+              setSent(true)
+              setError("")
+            } catch (e) {
+              setError(e instanceof Error ? e.message : "Report failed.")
+            } finally {
+              setBusy(false)
+            }
+          }}
+        >
+          {!isAuthenticated ? (
+            <Link href="/sign-in">Sign in to report this content.</Link>
+          ) : sent ? (
+            <p role="status">Thanks. Your report is with the community desk.</p>
+          ) : (
+            <>
+              <label className="field">
+                <span>What should we look at?</span>
+                <textarea
+                  required
+                  minLength={10}
+                  maxLength={2000}
+                  value={reason}
+                  onChange={(e) => setReason(e.target.value)}
+                />
+              </label>
+              <Button disabled={busy} type="submit">
+                Send report
+              </Button>
+            </>
+          )}
+          {error && (
+            <p className="error" role="alert">
+              {error}
+            </p>
+          )}
+        </form>
+      )}
+    </>
+  )
+}
 export function Social({ post, closed }: { post: string; closed: boolean }) {
   return configured ? (
     <LiveSocial post={post as Id<"posts">} closed={closed} />
@@ -85,6 +161,7 @@ function LiveSocial({ post, closed }: { post: Id<"posts">; closed: boolean }) {
         >
           {social?.following ? "✓ Following" : "Follow writer"}
         </Button>
+        <ReportButton kind="post" target={post} />
       </div>
       {error && (
         <p className="error" role="alert">
@@ -221,6 +298,7 @@ function LiveSocial({ post, closed }: { post: Id<"posts">; closed: boolean }) {
                   </Button>
                 </>
               )}
+              <ReportButton kind="comment" target={c._id} />
             </div>
           </div>
         ))}
