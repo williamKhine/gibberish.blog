@@ -98,6 +98,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
         <span>A little less polished. A little more you.</span>
         <div>
           <Link href="/rules">House rules</Link>
+          <a href="/rss.xml">RSS ↗</a>
           <Link href="/dashboard">
             Your corner <HugeiconsIcon icon={ArrowUpRight01Icon} size={14} />
           </Link>
