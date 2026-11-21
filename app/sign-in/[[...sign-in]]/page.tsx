@@ -1,24 +1,11 @@
+import Link from "next/link"
+import { PasswordSignIn } from "@/components/password-sign-in"
+import { authDestination } from "@/lib/auth-destination"
 import { isAuthenticatedNextjs } from "@convex-dev/auth/nextjs/server"
 import { redirect } from "next/navigation"
 import { configured } from "@/lib/config"
 import { PreviewGate } from "@/components/auth-gate"
 import { GoogleSignIn } from "@/components/google-sign-in"
-
-function destination(next: string | string[] | undefined) {
-  if (typeof next !== "string" || !next.startsWith("/")) return "/dashboard"
-
-  const origin = "https://gibberish.invalid"
-  const url = URL.parse(next, origin)
-  if (
-    !url ||
-    url.origin !== origin ||
-    url.pathname.startsWith("//") ||
-    /^\/sign-(in|up)(\/|$)/.test(url.pathname)
-  )
-    return "/dashboard"
-
-  return url.pathname + url.search
-}
 
 export default async function Page({
   searchParams,
@@ -26,26 +13,51 @@ export default async function Page({
   searchParams: Promise<{
     next?: string | string[]
     returned?: string | string[]
+    recover?: string | string[]
   }>
 }) {
   if (!configured) return <PreviewGate />
 
-  const { next, returned } = await searchParams
-  const target = destination(next)
-  if (await isAuthenticatedNextjs()) redirect(target)
+  const { next, returned, recover } = await searchParams
+  const target = authDestination(next)
+  if (recover !== "finish" && (await isAuthenticatedNextjs())) redirect(target)
+
+  if (recover === "1" || recover === "finish") {
+    const mode = recover === "finish" ? "reset-verification" : "reset"
+    return (
+      <div className="page-width narrow inner-page">
+        <h1>Reset your password.</h1>
+        <PasswordSignIn key={mode} mode={mode} target={target} />
+        <Link href={{ pathname: "/sign-in", query: { next: target } }}>
+          Back to sign in
+        </Link>
+      </div>
+    )
+  }
 
   const callback = new URLSearchParams({ next: target, returned: "1" })
   return (
     <div className="page-width narrow inner-page">
       <h1>Log in to Gibberish.</h1>
-      <p className="intro">Use your Google account to join or log in.</p>
+
       {returned === "1" && (
         <p role="alert" className="error">
           Google sign-in didn’t complete. Please try again with a verified
           email.
         </p>
       )}
-      <GoogleSignIn redirectTo={`/sign-in?${callback}`} />
+      <PasswordSignIn key="signIn" mode="signIn" target={target} />
+      <div className="row">
+        <GoogleSignIn redirectTo={`/sign-in?${callback}`} />
+        <Link
+          href={{ pathname: "/sign-in", query: { next: target, recover: "1" } }}
+        >
+          Forgot password?
+        </Link>
+        <Link href={{ pathname: "/sign-up", query: { next: target } }}>
+          Create an account
+        </Link>
+      </div>
     </div>
   )
 }
