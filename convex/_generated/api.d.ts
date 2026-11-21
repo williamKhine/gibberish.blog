@@ -13,6 +13,7 @@ import type * as auth from "../auth.js";
 import type * as community from "../community.js";
 import type * as http from "../http.js";
 import type * as media from "../media.js";
+import type * as password from "../password.js";
 
 import type {
   ApiFromModules,
@@ -26,6 +27,7 @@ declare const fullApi: ApiFromModules<{
   community: typeof community;
   http: typeof http;
   media: typeof media;
+  password: typeof password;
 }>;
 
 /**
