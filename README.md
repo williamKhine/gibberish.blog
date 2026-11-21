@@ -19,10 +19,9 @@ Open http://localhost:3000. Without the two Convex URLs, the app displays a **la
 2. Run `npx convex dev` and create or select a development deployment. It fills in `CONVEX_DEPLOYMENT` and `NEXT_PUBLIC_CONVEX_URL` and deploys the backend.
 3. Set `NEXT_PUBLIC_CONVEX_SITE_URL` to the deployment's HTTP Actions URL, typically `https://your-deployment.convex.site`. Keep `NEXT_PUBLIC_SITE_URL=http://localhost:3000` locally.
 4. Set `SITE_URL=http://localhost:3000` on the Convex deployment. Follow [Convex Auth manual setup](https://labs.convex.dev/auth/setup/manual) to generate and set `JWT_PRIVATE_KEY` and `JWKS`. The auth code and schema are already in this repo.
-5. Create a Google OAuth web client. Register `https://your-deployment.convex.site/api/auth/callback/google` as its authorized redirect URI. Set `AUTH_GOOGLE_ID` and `AUTH_GOOGLE_SECRET` on the Convex deployment. If the OAuth app is in testing mode, add the accounts you'll use as test users. See [Google provider setup](https://labs.convex.dev/auth/config/oauth/google).
-6. To send sign-up verification and password reset emails, verify a sending domain in [Resend](https://resend.com/docs/dashboard/domains/introduction). Set `AUTH_RESEND_KEY` to a sending API key and `AUTH_EMAIL_FROM` to a sender on that domain, such as `Gibberish <welcome@example.com>`, on the Convex deployment.
-7. Keep `npx convex dev` running and start Next.js with `npm run dev`. Open the exact origin in `SITE_URL`. To allow uploads from additional origins, set `UPLOAD_ALLOWED_ORIGINS` on Convex to a comma-separated list that includes the app origin.
-8. Sign in and visit `/dashboard`. In the Convex dashboard, find your row in the `users` table and copy its `_id` into `ADMIN_AUTH_USER_IDS`. Use comma-separated IDs for multiple administrators. Visit `/admin` to review applications. Submit and approve a writer application for your own account if you also want to publish.
+5. To send sign-up verification and password reset emails, verify a sending domain in [Resend](https://resend.com/docs/dashboard/domains/introduction). Set `AUTH_RESEND_KEY` to a sending API key and `AUTH_EMAIL_FROM` to a sender on that domain, such as `Gibberish <welcome@example.com>`, on the Convex deployment.
+6. Keep `npx convex dev` running and start Next.js with `npm run dev`. Open the exact origin in `SITE_URL`. To allow uploads from additional origins, set `UPLOAD_ALLOWED_ORIGINS` on Convex to a comma-separated list that includes the app origin.
+7. Sign in and visit `/dashboard`. In the Convex dashboard, find your row in the `users` table and copy its `_id` into `ADMIN_AUTH_USER_IDS`. Use comma-separated IDs for multiple administrators. Visit `/admin` to review applications. Submit and approve a writer application for your own account if you also want to publish.
 
 No production accounts, secrets, or deployments are included. Never place secret keys in `NEXT_PUBLIC_` variables or commit `.env.local`.
 
@@ -66,17 +65,16 @@ Backend tests run against `convex-test` without a hosted account. They exercise 
 
 `npm run build` uses Next.js's supported Webpack compiler. Turbopack's build worker encountered a local sandbox/port error during validation; development still uses Turbopack.
 
-Live Google sign-in, password sign-in, email delivery, actual cloud storage, and Vercel deployment require provisioned accounts and must be smoke-tested after configuration. No claim of a live end-to-end auth test is made by the offline suite. The shadcn CLI is a development dependency; production does not need its registry tooling. Review development-tool advisories separately when updating dependencies.
+Live password sign-in, email delivery, actual cloud storage, and Vercel deployment require provisioned accounts and must be smoke-tested after configuration. No claim of a live end-to-end auth test is made by the offline suite. The shadcn CLI is a development dependency; production does not need its registry tooling. Review development-tool advisories separately when updating dependencies.
 
 ## Vercel preview and beta launch
 
-1. Use separate Google OAuth clients and Convex deployments for development and production. Do not connect an untrusted preview to production data.
+1. Use separate Convex deployments for development and production. Do not connect an untrusted preview to production data.
 2. Import this repository into Vercel as a Next.js project. Set all required `.env.example` Next.js values in the appropriate Preview/Production environment. Set `NEXT_PUBLIC_SITE_URL` to that environment's stable URL.
-3. Deploy backend functions to the matching Convex environment before building the frontend. For manual production deployment, run `npx convex deploy` after configuring the production auth keys, OAuth credentials, site URL, and any administrator IDs. Alternatively use Convex's documented Vercel integration and scoped deploy key in Vercel's secret environment settings.
+3. Deploy backend functions to the matching Convex environment before building the frontend. For manual production deployment, run `npx convex deploy` after configuring the production auth keys, Resend credentials, site URL, and any administrator IDs. Alternatively use Convex's documented Vercel integration and scoped deploy key in Vercel's secret environment settings.
 4. Keep the default frontend build command `npm run build`. Use the stable app origin as `SITE_URL` in each Convex deployment. Set each environment's `.convex.site` and `.convex.cloud` URLs correctly.
-5. Register each deployment’s Convex HTTP callback URL with its matching Google OAuth client.
-6. Smoke-test with two normal accounts and an administrator: signup → application → approval → draft → publish → follow/react/comment/report → moderation. Confirm another account and the administrator cannot read private drafts or their media. Confirm public image URLs stop working after unpublish/removal/suspension.
-7. Verify Google sign-in, password sign-up with a verification code, password sign-in, password reset, sign-out, uploads near the 10 MiB limit, mobile editing, sitemap/RSS, social previews, error handling, and production logs. Then promote the preview to the small beta.
+5. Smoke-test with two normal accounts and an administrator: signup → application → approval → draft → publish → follow/react/comment/report → moderation. Confirm another account and the administrator cannot read private drafts or their media. Confirm public image URLs stop working after unpublish/removal/suspension.
+6. Verify password sign-up with a verification code, password sign-in, password reset, sign-out, uploads near the 10 MiB limit, mobile editing, sitemap/RSS, social previews, error handling, and production logs. Then promote the preview to the small beta.
 
 Rollback the frontend through Vercel and deploy a compatible previous Convex revision if needed. Preserve data when rolling back; do not delete tables as a deployment shortcut.
 
