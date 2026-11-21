@@ -1,34 +1,49 @@
+import { getAuthUserId } from "@convex-dev/auth/server"
 import { ConvexError } from "convex/values"
 import type { MutationCtx, QueryCtx } from "./_generated/server"
 import type { Doc, Id } from "./_generated/dataModel"
 import { mediaIds, parseBody } from "../lib/content"
-export async function optionalMember(ctx: QueryCtx) {
-  const identity = await ctx.auth.getUserIdentity()
-  return identity
-    ? ctx.db
-        .query("members")
-        .withIndex("subject", (q) => q.eq("subject", identity.subject))
-        .unique()
-    : null
+export async function verifiedUserId(ctx: QueryCtx) {
+  const userId = await getAuthUserId(ctx)
+  const user = userId ? await ctx.db.get(userId) : null
+  return user?.emailVerificationTime !== undefined ? user._id : null
 }
+
+export function findMember(ctx: QueryCtx, userId: Id<"users">) {
+  return ctx.db
+    .query("members")
+    .withIndex("subject", (q) => q.eq("subject", userId))
+    .unique()
+}
+
+export async function optionalMember(ctx: QueryCtx) {
+  const userId = await verifiedUserId(ctx)
+  return userId ? findMember(ctx, userId) : null
+}
+
 export async function member(ctx: QueryCtx, approved = false) {
-  const identity = await ctx.auth.getUserIdentity()
-  if (!identity || identity.emailVerified !== true)
-    throw new ConvexError("Sign in with a verified email.")
-  const user = await optionalMember(ctx)
+  const userId = await verifiedUserId(ctx)
+  if (!userId) throw new ConvexError("Sign in with a verified email.")
+  const user = await findMember(ctx, userId)
   if (!user || user.suspended) throw new ConvexError("Account unavailable.")
   if (approved && !user.approved)
     throw new ConvexError("Writer approval required.")
   return user
 }
-export async function admin(ctx: QueryCtx) {
-  const user = await member(ctx)
-  if (
-    !(process.env.ADMIN_CLERK_IDS ?? "")
+
+export function isAdministrator(user: Doc<"members">) {
+  return (
+    !user.suspended &&
+    (process.env.ADMIN_AUTH_USER_IDS ?? "")
       .split(",")
-      .map((s) => s.trim())
+      .map((id) => id.trim())
       .includes(user.subject)
   )
+}
+
+export async function admin(ctx: QueryCtx) {
+  const user = await member(ctx)
+  if (!isAdministrator(user))
     throw new ConvexError("Administrator access required.")
   return user
 }

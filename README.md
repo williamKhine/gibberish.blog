@@ -1,6 +1,6 @@
 # Gibberish.blog
 
-A scrapbook-style blogging community built with Next.js, Clerk, Convex, shadcn/ui, and Tiptap. Anyone can register to follow, bookmark, and react. A reviewed writer application unlocks public posts, comments, media uploads, and customized profiles.
+A scrapbook-style blogging community built with Next.js, Convex, Convex Auth, shadcn/ui, and Tiptap. Anyone can register to follow, bookmark, and react. A reviewed writer application unlocks public posts, comments, media uploads, and customized profiles.
 
 ## Run the preview
 
@@ -11,38 +11,17 @@ npm ci
 npm run dev
 ```
 
-Open http://localhost:3000. Without Clerk and Convex configuration, the app displays a **labeled sample-data preview**. Sample posts never enter the database or the sitemap/RSS feed. Protected pages show a setup gate; preview mode does not simulate authenticated actions.
+Open http://localhost:3000. Without the two Convex URLs, the app displays a **labeled sample-data preview**. Sample posts never enter the database or the sitemap/RSS feed. Protected pages show a setup gate; preview mode does not simulate authenticated actions.
 
 ## Connect development services
 
 1. Copy `.env.example` to `.env.local`.
-2. Create a Clerk application. Enable Google and email sign-in, require a verified email address, and enable the Convex integration. Configure the JWT template named **convex** with audience **convex** and these claims (preserve other integration defaults):
-
-   ```json
-   {
-     "aud": "convex",
-     "email": "{{user.primary_email_address}}",
-     "email_verified": "{{user.email_verified}}"
-   }
-   ```
-
-   `email_verified` must resolve to the Boolean `true`, not the string `"true"`. The backend deliberately refuses accounts without this verified claim. See [Clerk JWT templates](https://clerk.com/docs/guides/sessions/jwt-templates) and [Convex's Clerk integration](https://docs.convex.dev/auth/clerk).
-
-3. Fill `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` and `CLERK_SECRET_KEY` in `.env.local`. Keep the sign-in/up URLs from `.env.example`.
-4. Run `npx convex dev`, authenticate, and create/select a **development** project. This writes `CONVEX_DEPLOYMENT` and `NEXT_PUBLIC_CONVEX_URL`, deploys functions, and regenerates `convex/_generated/`. Bootstrap generated types are checked in so the source and tests work before account provisioning.
-5. In the Convex development dashboard, set:
-
-   | Variable                  | Value                                                               |
-   | ------------------------- | ------------------------------------------------------------------- |
-   | `CLERK_JWT_ISSUER_DOMAIN` | Your Clerk frontend API URL, including `https://`                   |
-   | `ADMIN_CLERK_IDS`         | Comma-separated Clerk user IDs allowed to administer the community  |
-   | `SITE_URL`                | `http://localhost:3000,http://127.0.0.1:3000` for local upload CORS |
-
-   The auth config requires its issuer before the first successful deployment. If `convex dev` stops on the missing issuer, set it in the dashboard and restart the command. These variables belong to **Convex**, not just Next.js.
-
-6. Set `NEXT_PUBLIC_CONVEX_SITE_URL` to your deployment's HTTP Actions URL (`https://your-deployment.convex.site`). This differs from the `.convex.cloud` URL. Keep `NEXT_PUBLIC_SITE_URL=http://localhost:3000` locally.
-7. Keep `npx convex dev` running in one terminal and `npm run dev` in another. Restart Next.js after changing environment variables.
-8. Sign up, visit `/dashboard`, and find your Clerk user ID in the Clerk dashboard. Add it to `ADMIN_CLERK_IDS` in Convex. Visit `/admin` to review applications. Administrator privileges are separate from writer approval; submit and approve your own writer application if you also want to publish.
+2. Run `npx convex dev` and create or select a development deployment. It fills in `CONVEX_DEPLOYMENT` and `NEXT_PUBLIC_CONVEX_URL` and deploys the backend.
+3. Set `NEXT_PUBLIC_CONVEX_SITE_URL` to the deployment's HTTP Actions URL, typically `https://your-deployment.convex.site`. Keep `NEXT_PUBLIC_SITE_URL=http://localhost:3000` locally.
+4. Set `SITE_URL=http://localhost:3000` on the Convex deployment. Follow [Convex Auth manual setup](https://labs.convex.dev/auth/setup/manual) to generate and set `JWT_PRIVATE_KEY` and `JWKS`. The auth code and schema are already in this repo.
+5. Create a Google OAuth web client. Register `https://your-deployment.convex.site/api/auth/callback/google` as its authorized redirect URI. Set `AUTH_GOOGLE_ID` and `AUTH_GOOGLE_SECRET` on the Convex deployment. If the OAuth app is in testing mode, add the accounts you'll use as test users. See [Google provider setup](https://labs.convex.dev/auth/config/oauth/google).
+6. Keep `npx convex dev` running and start Next.js with `npm run dev`. Open the exact origin in `SITE_URL`. To allow uploads from additional origins, set `UPLOAD_ALLOWED_ORIGINS` on Convex to a comma-separated list that includes the app origin.
+7. Sign in with Google and visit `/dashboard`. In the Convex dashboard, find your row in the `users` table and copy its `_id` into `ADMIN_AUTH_USER_IDS`. Use comma-separated IDs for multiple administrators. Visit `/admin` to review applications. Submit and approve a writer application for your own account if you also want to publish.
 
 No production accounts, secrets, or deployments are included. Never place secret keys in `NEXT_PUBLIC_` variables or commit `.env.local`.
 
@@ -86,17 +65,17 @@ Backend tests run against `convex-test` without a hosted account. They exercise 
 
 `npm run build` uses Next.js's supported Webpack compiler. Turbopack's build worker encountered a local sandbox/port error during validation; development still uses Turbopack.
 
-Live Clerk login, actual cloud storage, and Vercel deployment require provisioned accounts and must be smoke-tested after configuration. No claim of a live end-to-end auth test is made by the offline suite. The shadcn CLI is a development dependency; production does not need its registry tooling. Review development-tool advisories separately when updating dependencies.
+Live Google sign-in, actual cloud storage, and Vercel deployment require provisioned accounts and must be smoke-tested after configuration. No claim of a live end-to-end auth test is made by the offline suite. The shadcn CLI is a development dependency; production does not need its registry tooling. Review development-tool advisories separately when updating dependencies.
 
 ## Vercel preview and beta launch
 
-1. Use separate Clerk development/production instances and Convex development/production deployments. Do not connect an untrusted preview to production data.
+1. Use separate Google OAuth clients and Convex deployments for development and production. Do not connect an untrusted preview to production data.
 2. Import this repository into Vercel as a Next.js project. Set all required `.env.example` Next.js values in the appropriate Preview/Production environment. Set `NEXT_PUBLIC_SITE_URL` to that environment's stable URL.
-3. Deploy backend functions to the matching Convex environment before building the frontend. For manual production deployment, run `npx convex deploy` after configuring the production issuer/admin/origin variables. Alternatively use Convex's documented Vercel integration and scoped deploy key in Vercel's secret environment settings.
-4. Keep the default frontend build command `npm run build`. Use a stable preview domain in Convex's `SITE_URL` allowlist; add the production domain at beta launch. Set each environment's `.convex.site` and `.convex.cloud` URLs correctly.
-5. Configure Clerk's allowed domains/redirects and production Google OAuth credentials. Use the production Clerk keys only with the production Convex issuer.
+3. Deploy backend functions to the matching Convex environment before building the frontend. For manual production deployment, run `npx convex deploy` after configuring the production auth keys, OAuth credentials, site URL, and any administrator IDs. Alternatively use Convex's documented Vercel integration and scoped deploy key in Vercel's secret environment settings.
+4. Keep the default frontend build command `npm run build`. Use the stable app origin as `SITE_URL` in each Convex deployment. Set each environment's `.convex.site` and `.convex.cloud` URLs correctly.
+5. Register each deployment’s Convex HTTP callback URL with its matching Google OAuth client.
 6. Smoke-test with two normal accounts and an administrator: signup → application → approval → draft → publish → follow/react/comment/report → moderation. Confirm another account and the administrator cannot read private drafts or their media. Confirm public image URLs stop working after unpublish/removal/suspension.
-7. Verify Google and email sign-in, uploads near the 10 MiB limit, mobile editing, sitemap/RSS, social previews, error handling, and production logs. Then promote the preview to the small beta.
+7. Verify Google sign-in and sign-out, uploads near the 10 MiB limit, mobile editing, sitemap/RSS, social previews, error handling, and production logs. Then promote the preview to the small beta.
 
 Rollback the frontend through Vercel and deploy a compatible previous Convex revision if needed. Preserve data when rolling back; do not delete tables as a deployment shortcut.
 

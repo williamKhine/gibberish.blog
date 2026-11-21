@@ -1,10 +1,9 @@
-import { auth } from "@clerk/nextjs/server"
+import { convexAuthNextjsToken } from "@convex-dev/auth/nextjs/server"
 import { configured, convexSite } from "@/lib/config"
 export async function GET(request: Request) {
   if (!configured || !convexSite)
     return new Response("Not found", { status: 404 })
-  const { getToken } = await auth()
-  const token = await getToken({ template: "convex" })
+  const token = await convexAuthNextjsToken()
   const input = new URL(request.url)
   const url = new URL("/media", convexSite)
   for (const key of ["id", "post", "profile"]) {

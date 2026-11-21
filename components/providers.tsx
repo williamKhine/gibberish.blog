@@ -1,7 +1,6 @@
 "use client"
-import { ClerkProvider, useAuth } from "@clerk/nextjs"
+import { ConvexAuthNextjsProvider } from "@convex-dev/auth/nextjs"
 import { ConvexReactClient } from "convex/react"
-import { ConvexProviderWithClerk } from "convex/react-clerk"
 import { ThemeProvider } from "./theme-provider"
 import { configured } from "@/lib/config"
 const client = configured
@@ -10,11 +9,7 @@ const client = configured
 export function Providers({ children }: { children: React.ReactNode }) {
   const theme = <ThemeProvider>{children}</ThemeProvider>
   return client ? (
-    <ClerkProvider>
-      <ConvexProviderWithClerk client={client} useAuth={useAuth}>
-        {theme}
-      </ConvexProviderWithClerk>
-    </ClerkProvider>
+    <ConvexAuthNextjsProvider client={client}>{theme}</ConvexAuthNextjsProvider>
   ) : (
     theme
   )

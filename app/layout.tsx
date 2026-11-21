@@ -1,3 +1,4 @@
+import { ConvexAuthNextjsServerProvider } from "@convex-dev/auth/nextjs/server"
 import type { Metadata } from "next"
 import "@fontsource-variable/roboto-slab"
 import "@fontsource-variable/oxanium"
@@ -22,12 +23,19 @@ export default function RootLayout({
 }: {
   children: React.ReactNode
 }) {
+  const app = (
+    <Providers>
+      <Shell>{children}</Shell>
+    </Providers>
+  )
   return (
     <html lang="en" suppressHydrationWarning>
       <body>
-        <Providers>
-          <Shell>{children}</Shell>
-        </Providers>
+        {configured ? (
+          <ConvexAuthNextjsServerProvider>{app}</ConvexAuthNextjsServerProvider>
+        ) : (
+          app
+        )}
       </body>
     </html>
   )

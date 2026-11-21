@@ -2,10 +2,16 @@ import { httpRouter } from "convex/server"
 import { httpAction } from "./_generated/server"
 import { internal } from "./_generated/api"
 import { sniffImage } from "../lib/content"
+import { auth } from "./auth"
 const http = httpRouter()
+auth.addHttpRoutes(http)
 function cors(request: Request) {
   const origin = request.headers.get("origin") ?? ""
-  const allowed = (process.env.SITE_URL ?? "http://localhost:3000")
+  const allowed = (
+    process.env.UPLOAD_ALLOWED_ORIGINS ??
+    process.env.SITE_URL ??
+    "http://localhost:3000"
+  )
     .split(",")
     .map((x) => x.trim())
   return {

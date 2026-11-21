@@ -1,3 +1,4 @@
+import { authTables } from "@convex-dev/auth/server"
 import { defineSchema, defineTable } from "convex/server"
 import { v } from "convex/values"
 
@@ -9,7 +10,9 @@ export const content = v.object({
   cover: v.optional(v.id("media")),
 })
 export default defineSchema({
+  ...authTables,
   members: defineTable({
+    // Stable Convex Auth user ID, shared across the user’s sessions.
     subject: v.string(),
     approved: v.boolean(),
     suspended: v.boolean(),

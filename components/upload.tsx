@@ -1,5 +1,5 @@
 "use client"
-import { useAuth } from "@clerk/nextjs"
+import { useAuthToken } from "@convex-dev/auth/react"
 import { useState } from "react"
 import { convexSite } from "@/lib/config"
 export function Upload({
@@ -9,7 +9,7 @@ export function Upload({
   onUpload: (id: string) => void
   label?: string
 }) {
-  const { getToken } = useAuth()
+  const token = useAuthToken()
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState("")
   return (
@@ -29,7 +29,6 @@ export function Upload({
               throw new Error("Choose a file under 10 MB.")
             if (!convexSite)
               throw new Error("The media service has not been configured.")
-            const token = await getToken({ template: "convex" })
             if (!token) throw new Error("Sign in again before uploading.")
             const response = await fetch(`${convexSite}/upload`, {
               method: "POST",

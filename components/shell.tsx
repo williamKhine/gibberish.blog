@@ -1,8 +1,10 @@
 "use client"
 import Link from "next/link"
-import { usePathname } from "next/navigation"
+import { usePathname, useRouter } from "next/navigation"
+import { useState } from "react"
 import { useTheme } from "next-themes"
-import { SignInButton, UserButton, useUser } from "@clerk/nextjs"
+import { useAuthActions } from "@convex-dev/auth/react"
+import { useConvexAuth } from "convex/react"
 import { HugeiconsIcon } from "@hugeicons/react"
 import {
   Search01Icon,
@@ -11,16 +13,43 @@ import {
   Moon02Icon,
   ArrowUpRight01Icon,
 } from "@hugeicons/core-free-icons"
+import { hasAuthCookie } from "@/lib/auth-session"
 import { configured } from "@/lib/config"
 import { Button } from "./ui/button"
 function Account() {
-  const { isSignedIn } = useUser()
-  return isSignedIn ? (
-    <UserButton />
+  const { isAuthenticated, isLoading } = useConvexAuth()
+  const { signOut } = useAuthActions()
+  const router = useRouter()
+  const [pending, setPending] = useState(false)
+  const [error, setError] = useState("")
+
+  async function logOut() {
+    setPending(true)
+    setError("")
+    try {
+      await signOut()
+      if (await hasAuthCookie()) throw new Error("Session cookie remains.")
+      router.replace("/")
+      router.refresh()
+    } catch {
+      setError("Couldn’t sign out. Please try again.")
+    } finally {
+      setPending(false)
+    }
+  }
+
+  if (isLoading) return null
+  return isAuthenticated || error ? (
+    <>
+      <Button variant="ghost" disabled={pending} onClick={logOut}>
+        {pending ? "Signing out…" : "Sign out"}
+      </Button>
+      {error && <span role="alert">{error}</span>}
+    </>
   ) : (
-    <SignInButton mode="modal">
-      <Button variant="ghost">Log in</Button>
-    </SignInButton>
+    <Link href="/sign-in" className="login-link">
+      Log in
+    </Link>
   )
 }
 export function Shell({ children }: { children: React.ReactNode }) {

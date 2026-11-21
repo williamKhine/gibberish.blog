@@ -6,6 +6,8 @@ import { content } from "./schema"
 import {
   admin,
   contentMedia,
+  findMember,
+  isAdministrator,
   limit,
   member,
   optionalMember,
@@ -13,6 +15,7 @@ import {
   profile,
   publicMember,
   visiblePost,
+  verifiedUserId,
 } from "./access"
 import { EMPTY_BODY, parseBody, plainText, slugify } from "../lib/content"
 import type { Doc } from "./_generated/dataModel"
@@ -21,10 +24,9 @@ import type { QueryCtx } from "./_generated/server"
 export const ensureMember = mutation({
   args: {},
   handler: async (ctx) => {
-    const identity = await ctx.auth.getUserIdentity()
-    if (!identity || identity.emailVerified !== true)
-      throw new ConvexError("Please verify your email first.")
-    const existing = await optionalMember(ctx)
+    const userId = await verifiedUserId(ctx)
+    if (!userId) throw new ConvexError("Please verify your email first.")
+    const existing = await findMember(ctx, userId)
     if (existing) return existing._id
     // Convex seeds Math.random for deterministic transaction retries.
     let handle: string
@@ -37,7 +39,7 @@ export const ensureMember = mutation({
         .first()
     )
     return ctx.db.insert("members", {
-      subject: identity.subject,
+      subject: userId,
       approved: false,
       suspended: false,
       hidden: false,
@@ -61,12 +63,7 @@ export const me = query({
     return {
       ...user,
       application,
-      isAdmin:
-        !user.suspended &&
-        (process.env.ADMIN_CLERK_IDS ?? "")
-          .split(",")
-          .map((s) => s.trim())
-          .includes(user.subject),
+      isAdmin: isAdministrator(user),
     }
   },
 })

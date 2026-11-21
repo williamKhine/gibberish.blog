@@ -1,15 +1,21 @@
-import { clerkMiddleware } from "@clerk/nextjs/server"
+import { convexAuthNextjsMiddleware } from "@convex-dev/auth/nextjs/server"
 import {
   NextResponse,
   type NextRequest,
   type NextFetchEvent,
 } from "next/server"
-const clerk = clerkMiddleware()
+import { configured } from "@/lib/config"
+
+const auth = convexAuthNextjsMiddleware((request) => {
+  const destination = request.nextUrl.clone()
+  destination.searchParams.delete("_rsc")
+  const headers = new Headers(request.headers)
+  headers.set("x-auth-return-to", destination.pathname + destination.search)
+  return NextResponse.next({ request: { headers } })
+})
+
 export default function proxy(request: NextRequest, event: NextFetchEvent) {
-  return process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY &&
-    process.env.NEXT_PUBLIC_CONVEX_URL
-    ? clerk(request, event)
-    : NextResponse.next()
+  return configured ? auth(request, event) : NextResponse.next()
 }
 export const config = {
   matcher: [

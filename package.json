@@ -15,8 +15,9 @@
     "convex:dev": "convex dev"
   },
   "dependencies": {
+    "@auth/core": "0.41.3",
     "@base-ui/react": "^1.8.0",
-    "@clerk/nextjs": "^7.9.11",
+    "@convex-dev/auth": "0.0.98",
     "@fontsource-variable/oxanium": "^5.3.0",
     "@fontsource-variable/roboto-slab": "^5.3.0",
     "@hugeicons/core-free-icons": "^4.3.5",

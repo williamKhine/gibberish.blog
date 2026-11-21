@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest"
+import { describe, expect, it, vi } from "vitest"
 import { convexTest } from "convex-test"
 import schema from "../convex/schema"
 import { api, internal } from "../convex/_generated/api"
@@ -19,17 +19,28 @@ const content = {
   excerpt: "A small thing.",
   tags: ["life"],
 }
-function setup() {
+async function setup() {
   const t = convexTest(schema, modules)
+  const [alice, bob, administrator, unverified] = await t.run(async (ctx) => {
+    return await Promise.all([
+      ctx.db.insert("users", { emailVerificationTime: 1 }),
+      ctx.db.insert("users", { emailVerificationTime: 1 }),
+      ctx.db.insert("users", { emailVerificationTime: 1 }),
+      ctx.db.insert("users", {}),
+    ])
+  })
+  vi.stubEnv("ADMIN_AUTH_USER_IDS", administrator)
   return {
     t,
-    alice: t.withIdentity({ subject: "alice", emailVerified: true }),
-    bob: t.withIdentity({ subject: "bob", emailVerified: true }),
-    admin: t.withIdentity({ subject: "admin", emailVerified: true }),
+    alice: t.withIdentity({ subject: `${alice}|first-session` }),
+    aliceAgain: t.withIdentity({ subject: `${alice}|second-session` }),
+    bob: t.withIdentity({ subject: `${bob}|session` }),
+    admin: t.withIdentity({ subject: `${administrator}|session` }),
+    unverified: t.withIdentity({ subject: `${unverified}|session` }),
   }
 }
 async function approved() {
-  const x = setup()
+  const x = await setup()
   const aliceId = await x.alice.mutation(api.community.ensureMember)
   const bobId = await x.bob.mutation(api.community.ensureMember)
   await x.admin.mutation(api.community.ensureMember)
@@ -53,28 +64,25 @@ async function published() {
   })
   return { ...x, post }
 }
-beforeEach(() => {
-  vi.stubEnv("ADMIN_CLERK_IDS", "admin")
-})
 describe("membership and authorization", () => {
   it("requires verified identity to create a member", async () => {
-    const { t } = setup()
+    const { t, unverified } = await setup()
     await expect(t.mutation(api.community.ensureMember)).rejects.toThrow()
     await expect(
-      t
-        .withIdentity({ subject: "x", emailVerified: false })
-        .mutation(api.community.ensureMember)
+      unverified.mutation(api.community.ensureMember)
     ).rejects.toThrow("verify")
   })
   it("makes member creation idempotent and does not expose identity in public profiles", async () => {
     const x = await approved()
-    expect(await x.alice.mutation(api.community.ensureMember)).toBe(x.aliceId)
+    expect(await x.aliceAgain.mutation(api.community.ensureMember)).toBe(
+      x.aliceId
+    )
     const me = await x.alice.query(api.community.me)
     const p = await x.t.query(api.community.getProfile, { handle: me!.handle })
     expect(p).not.toHaveProperty("subject")
   })
   it("lets readers draft but blocks publishing, comments, uploads and public profiles", async () => {
-    const { alice } = setup()
+    const { alice } = await setup()
     await alice.mutation(api.community.ensureMember)
     const id = await alice.mutation(api.community.createDraft)
     await alice.mutation(api.community.saveDraft, { id, revision: 0, content })
@@ -118,7 +126,7 @@ describe("membership and authorization", () => {
     ).rejects.toThrow("Administrator")
   })
   it("processes application approval without publishing a sample", async () => {
-    const { t, alice, admin } = setup()
+    const { t, alice, admin } = await setup()
     await alice.mutation(api.community.ensureMember)
     await admin.mutation(api.community.ensureMember)
     await alice.mutation(api.community.apply, {
@@ -143,7 +151,7 @@ describe("membership and authorization", () => {
     ).toHaveLength(0)
   })
   it("allows rejected applications to be revised and blocks duplicate pending applications", async () => {
-    const x = setup()
+    const x = await setup()
     await x.alice.mutation(api.community.ensureMember)
     await x.admin.mutation(api.community.ensureMember)
     const application = {
@@ -496,7 +504,7 @@ describe("media and content safety", () => {
     ).toBeNull()
   })
   it("rejects unauthenticated uploads and returns no-store for inaccessible media", async () => {
-    const { t } = setup()
+    const { t } = await setup()
     const upload = await t.fetch("/upload", {
       method: "POST",
       body: "not an image",
@@ -604,7 +612,7 @@ describe("upload HTTP boundary and complete publishing journey", () => {
     ).rejects.toThrow("unavailable")
   })
   it("joins, applies, gets approved, publishes, receives a comment and gets reported", async () => {
-    const x = setup()
+    const x = await setup()
     const aliceId = await x.alice.mutation(api.community.ensureMember)
     await x.admin.mutation(api.community.ensureMember)
     await x.bob.mutation(api.community.ensureMember)

@@ -10,19 +10,18 @@ export default function Page() {
       <h1>Your community is ready to connect.</h1>
       <p className="intro">
         This preview uses sample posts. Accounts, drafts, uploads, and
-        moderation become available after the project owner connects Clerk and
-        Convex.
+        moderation become available after the project owner configures Google
+        sign-in through Convex Auth.
       </p>
       <div className="panel">
         <h2>For the project owner</h2>
         <ol className="setup-list">
           <li>
-            Create a Clerk application with verified email and Google sign-in.
-            Enable its Convex integration.
+            Create a Convex deployment and configure its auth signing keys.
           </li>
           <li>
-            Create a Convex project and configure the Clerk issuer,
-            administrator identity, and allowed site origins.
+            Create a Google OAuth client for the deployment and configure its
+            credentials in Convex.
           </li>
           <li>
             Copy <code>.env.example</code> to <code>.env.local</code>, fill in
