@@ -1,5 +1,5 @@
 "use client"
-import { useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { DraftSaver } from "@/lib/autosave"
@@ -49,14 +49,18 @@ function EditorForm({
   const router = useRouter()
   const [value, setValue] = useState<Content>(doc.working)
   const current = useRef(value)
-  const initial = useRef(doc.working)
+  const [initialDraft] = useState(() => ({
+    content: doc.working,
+    revision: doc.revision,
+  }))
   const saver = useRef<DraftSaver<Content> | null>(null)
-  const recovered = useRef(false)
   const [status, setStatus] = useState("All changes saved")
   const [error, setError] = useState("")
   const [busy, setBusy] = useState(false)
   const [preview, setPreview] = useState(false)
-  const [recovery, setRecovery] = useState<Content | null>(null)
+  const [recovery, setRecovery] = useState<Content | null | undefined>(
+    undefined
+  )
   const key = `gibberish:draft:${doc.author}:${doc._id}`
   const editor = useEditor({
     extensions: [
@@ -87,10 +91,11 @@ function EditorForm({
       setStatus("Unsaved changes · local recovery unavailable")
     }
   }
-  if (!saver.current)
+  useEffect(() => {
+    if (saver.current) return
     saver.current = new DraftSaver(
-      doc.revision,
-      initial.current,
+      initialDraft.revision,
+      initialDraft.content,
       () => current.current,
       (content, revision) => save({ id: doc._id, revision, content }),
       (state) => {
@@ -102,9 +107,13 @@ function EditorForm({
         } else setStatus(state === "saving" ? "Saving…" : "Not saved")
       }
     )
-  async function flush() {
+  }, [doc._id, initialDraft, key, save])
+
+  const flush = useCallback(async () => {
     try {
-      await saver.current!.flush()
+      const draftSaver = saver.current
+      if (!draftSaver) throw new Error("Draft saving is still starting.")
+      await draftSaver.flush()
       setError("")
     } catch (e) {
       setError(
@@ -114,26 +123,32 @@ function EditorForm({
       )
       throw e
     }
-  }
-  const flushRef = useRef(flush)
-  flushRef.current = flush
+  }, [])
+
   useEffect(() => {
-    if (recovered.current) return
-    recovered.current = true
-    try {
-      const raw = localStorage.getItem(key)
-      if (raw) {
-        const parsed = JSON.parse(raw)
-        if (JSON.stringify(parsed.content) !== JSON.stringify(initial.current))
-          setRecovery(parsed.content)
-      }
-    } catch {}
-  }, [key])
+    const timer = window.setTimeout(() => {
+      try {
+        const raw = localStorage.getItem(key)
+        if (raw) {
+          const { content } = JSON.parse(raw)
+          if (
+            content &&
+            JSON.stringify(content) !== JSON.stringify(initialDraft.content)
+          ) {
+            setRecovery(content)
+            return
+          }
+        }
+      } catch {}
+      setRecovery(null)
+    }, 0)
+    return () => window.clearTimeout(timer)
+  }, [initialDraft, key])
   useEffect(() => {
     if (!saver.current?.dirty) return
-    const timer = setTimeout(() => void flushRef.current().catch(() => {}), 900)
+    const timer = setTimeout(() => void flush().catch(() => {}), 900)
     return () => clearTimeout(timer)
-  }, [value])
+  }, [flush, value])
   useEffect(() => {
     const handler = (e: BeforeUnloadEvent) => {
       if (saver.current?.dirty) {
@@ -174,7 +189,8 @@ function EditorForm({
       setBusy(false)
     }
   }
-  if (!editor) return <p className="empty-state">Sharpening the pencils…</p>
+  if (!editor || recovery === undefined)
+    return <p className="empty-state">Sharpening the pencils…</p>
   return (
     <div className="page-width narrow inner-page">
       <div className="row-between">
